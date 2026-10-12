@@ -1,0 +1,987 @@
+<title>Glock 17 3D-Modell</title>
+<meta name="description" content="Interaktives 3D-Anschauungsmodell einer Glock 17 (Gen 4), aufgebaut aus Grundkörpern mit three.js.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: full-bleed 3D stage; title sheet top-left, spec sheet bottom-left, controls bottom-right */
+  :root {
+    --bg: #e3e5e8;
+    --bg-glow: #f8f9fa;
+    --fg: #15171a;
+    --muted: #59606a;
+    --line: rgba(21, 23, 26, 0.14);
+    --panel: rgba(248, 249, 250, 0.74);
+    --accent: #87591a;          /* cartridge brass */
+    --accent-fg: #fff8ec;
+    --font-display: "Saira Semi Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+    --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1012;
+      --bg-glow: #2a2e34;
+      --fg: #e8eaed;
+      --muted: #969da6;
+      --line: rgba(232, 234, 237, 0.14);
+      --panel: rgba(20, 23, 26, 0.72);
+      --accent: #d8ab5c;
+      --accent-fg: #1b1306;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1012;
+    --bg-glow: #2a2e34;
+    --fg: #e8eaed;
+    --muted: #969da6;
+    --line: rgba(232, 234, 237, 0.14);
+    --panel: rgba(20, 23, 26, 0.72);
+    --accent: #d8ab5c;
+    --accent-fg: #1b1306;
+    color-scheme: dark;
+  }
+
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--fg);
+    font: 400 14px/1.5 var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .stage {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse 70% 60% at 50% 46%, var(--bg-glow), var(--bg) 72%);
+  }
+  .stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  .stage canvas:active { cursor: grabbing; }
+
+  .hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    padding-inline: max(16px, 2.2vw);
+    padding-block: calc(env(safe-area-inset-top, 0px) + 20px) calc(env(safe-area-inset-bottom, 0px) + 18px);
+  }
+  .hud > * { min-width: 0; }
+
+  .title { max-width: 30rem; }
+  .eyebrow {
+    margin: 0;
+    font: 500 0.72rem/1 var(--font-mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    margin: 0.35rem 0 0;
+    font: 700 clamp(2.4rem, 6vw, 4.2rem)/0.92 var(--font-display);
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+    text-wrap: balance;
+  }
+  .lede { margin: 0.7rem 0 0; max-width: 34ch; color: var(--muted); }
+
+  .bottom {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14px 24px;
+  }
+  .panel {
+    pointer-events: auto;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+
+  .specs { padding: 12px 16px 13px; min-width: 0; }
+  .specs h2 {
+    margin: 0 0 8px;
+    font: 500 0.68rem/1.2 var(--font-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .specs dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    gap: 8px 22px;
+  }
+  .specs div { display: grid; gap: 1px; }
+  .specs dt { font-size: 0.74rem; color: var(--muted); }
+  .specs dd {
+    margin: 0;
+    font: 500 0.95rem/1.2 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .specs .note { margin: 10px 0 0; font-size: 0.72rem; color: var(--muted); }
+
+  .controls { padding: 12px; display: grid; gap: 10px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+  .row-label {
+    width: 5.6rem;
+    font: 500 0.68rem/1 var(--font-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+  .seg button {
+    appearance: none;
+    border: 0;
+    border-right: 1px solid var(--line);
+    background: transparent;
+    color: var(--fg);
+    font: 500 0.8rem/1 var(--font-body);
+    padding: 8px 11px;
+    cursor: pointer;
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button:hover { background: var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+
+  .swatches { display: inline-flex; gap: 8px; }
+  .swatch {
+    appearance: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--sw);
+    cursor: pointer;
+    padding: 0;
+    box-shadow: inset 0 0 0 2px var(--panel);
+  }
+  .swatch[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .swatch-name { font-size: 0.8rem; color: var(--muted); min-width: 4.5em; }
+
+  .toggle {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 0;
+    background: transparent;
+    color: var(--fg);
+    font: 500 0.8rem/1 var(--font-body);
+    padding: 4px 0;
+    cursor: pointer;
+  }
+  .toggle .track {
+    width: 32px;
+    height: 18px;
+    border-radius: 9px;
+    background: var(--line);
+    position: relative;
+    transition: background 0.2s;
+  }
+  .toggle .track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--fg);
+    transition: transform 0.2s;
+  }
+  .toggle[aria-pressed="true"] .track { background: var(--accent); }
+  .toggle[aria-pressed="true"] .track::after { transform: translateX(14px); background: var(--accent-fg); }
+
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .tip {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 5;
+    pointer-events: none;
+    max-width: 16rem;
+    padding: 8px 11px 9px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+  .tip strong { display: block; font: 700 1rem/1.15 var(--font-display); text-transform: uppercase; letter-spacing: 0.03em; }
+  .tip span { display: block; margin-top: 2px; font-size: 0.78rem; color: var(--muted); line-height: 1.35; }
+
+  .status {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    font: 500 0.8rem/1 var(--font-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: center;
+    padding-inline: 16px;
+  }
+
+  @media (max-width: 720px) {
+    .lede { display: none; }
+    .bottom { flex-direction: column; align-items: stretch; }
+    .specs dl { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 12px; }
+    .specs dd { font-size: 0.85rem; white-space: normal; }
+    .row-label { width: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .toggle .track, .toggle .track::after { transition: none; }
+  }
+</style>
+
+<div class="stage" id="stage"></div>
+<div class="status" id="status">Modell wird aufgebaut …</div>
+
+<div class="hud">
+  <header class="title">
+    <p class="eyebrow">3D-Anschauungsmodell · Maßstab 1:1</p>
+    <h1>Glock 17</h1>
+    <p class="lede">Polymerpistole der 4. Generation, aus Grundkörpern nachmodelliert. Ziehen dreht das Modell, Scrollen zoomt, ein Teil antippen zeigt seinen Namen.</p>
+  </header>
+  <div></div>
+  <div class="bottom">
+    <section class="panel specs" aria-labelledby="specs-h">
+      <h2 id="specs-h">Vorbild, ca.-Werte</h2>
+      <dl>
+        <div><dt>Kaliber</dt><dd>9 × 19 mm</dd></div>
+        <div><dt>Länge</dt><dd>202 mm</dd></div>
+        <div><dt>Höhe</dt><dd>138 mm</dd></div>
+        <div><dt>Breite</dt><dd>32 mm</dd></div>
+        <div><dt>Lauflänge</dt><dd>114 mm</dd></div>
+        <div><dt>Magazin</dt><dd>17 Patronen</dd></div>
+      </dl>
+      <p class="note">Außenform vereinfacht, keine Innenmechanik.</p>
+    </section>
+
+    <section class="panel controls" aria-label="Darstellung">
+      <div class="row">
+        <span class="row-label" id="view-l">Ansicht</span>
+        <div class="seg" role="group" aria-labelledby="view-l">
+          <button type="button" id="view-hero" data-view="hero" aria-pressed="true">3/4</button>
+          <button type="button" id="view-left" data-view="left" aria-pressed="false">Links</button>
+          <button type="button" id="view-right" data-view="right" aria-pressed="false">Rechts</button>
+          <button type="button" id="view-top" data-view="top" aria-pressed="false">Oben</button>
+        </div>
+      </div>
+      <div class="row">
+        <span class="row-label" id="color-l">Rahmen</span>
+        <div class="swatches" role="group" aria-labelledby="color-l">
+          <button type="button" class="swatch" id="sw-black" data-color="schwarz" style="--sw:#1b1c1e" aria-pressed="true" aria-label="Schwarz"></button>
+          <button type="button" class="swatch" id="sw-coyote" data-color="coyote" style="--sw:#8c7656" aria-pressed="false" aria-label="Coyote"></button>
+          <button type="button" class="swatch" id="sw-olive" data-color="oliv" style="--sw:#50553f" aria-pressed="false" aria-label="Oliv"></button>
+          <button type="button" class="swatch" id="sw-grey" data-color="grau" style="--sw:#5d6167" aria-pressed="false" aria-label="Grau"></button>
+        </div>
+        <span class="swatch-name" id="swatch-name">Schwarz</span>
+      </div>
+      <div class="row">
+        <span class="row-label">Bewegung</span>
+        <button type="button" class="toggle" id="spin" aria-pressed="true"><span class="track" aria-hidden="true"></span>Langsam drehen</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="tip" id="tip" hidden><strong id="tip-name"></strong><span id="tip-desc"></span></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.8/build/index.module.js",
+    "three-bvh-csg": "https://cdn.jsdelivr.net/npm/three-bvh-csg@0.0.16/build/index.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
+
+/*
+ * Coordinate system of the model (all geometry in millimetres):
+ *   +x  towards the muzzle, x = 0 is the rear face of the slide
+ *   +y  up, y = 0 is the bottom edge of the slide
+ *   +z  the pistol's right side (ejection port side)
+ */
+const MM = 0.01; // scene units per millimetre
+
+// ---------------------------------------------------------------- materials
+
+const FRAME_COLORS = {
+  schwarz: { hex: 0x1b1c1e, label: 'Schwarz' },
+  coyote: { hex: 0x8c7656, label: 'Coyote' },
+  oliv: { hex: 0x50553f, label: 'Oliv' },
+  grau: { hex: 0x5d6167, label: 'Grau' }
+};
+
+function stippleTexture() {
+  const size = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  g.fillStyle = '#808080';
+  g.fillRect(0, 0, size, size);
+  let seed = 11;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 4200; i++) {
+    const x = rnd() * size, y = rnd() * size, r = 1.2 + rnd() * 2.2;
+    const v = rnd() > 0.45 ? 210 : 40;
+    g.fillStyle = `rgb(${v},${v},${v})`;
+    // draw wrapped copies so the tile repeats without seams
+    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) {
+      g.beginPath();
+      g.arc(x + ox, y + oy, r, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(1 / 16, 1 / 16); // extrusion UVs are in mm: one tile per 16 mm
+  return t;
+}
+
+const mats = {
+  slide: new THREE.MeshPhysicalMaterial({ name: 'Schlitten', color: 0x2c2e31, metalness: 0.6, roughness: 0.44, clearcoat: 0.2, clearcoatRoughness: 0.5 }),
+  slideInner: new THREE.MeshStandardMaterial({ name: 'Schlitten innen', color: 0x121315, metalness: 0.5, roughness: 0.6 }),
+  barrel: new THREE.MeshPhysicalMaterial({ name: 'Lauf', color: 0x3c3e42, metalness: 0.85, roughness: 0.3 }),
+  frame: new THREE.MeshStandardMaterial({ name: 'Rahmen', color: FRAME_COLORS.schwarz.hex, roughness: 0.7, metalness: 0 }),
+  grip: new THREE.MeshStandardMaterial({ name: 'Griff', color: FRAME_COLORS.schwarz.hex, roughness: 0.85, metalness: 0, bumpMap: stippleTexture(), bumpScale: 1.4 }),
+  polymer: new THREE.MeshStandardMaterial({ name: 'Polymer schwarz', color: 0x141517, roughness: 0.62, metalness: 0 }),
+  steel: new THREE.MeshStandardMaterial({ name: 'Stahl', color: 0x7a7e84, metalness: 0.9, roughness: 0.32 }),
+  cavity: new THREE.MeshStandardMaterial({ name: 'Bohrung', color: 0x050505, roughness: 0.95, metalness: 0 }),
+  paint: new THREE.MeshStandardMaterial({ name: 'Visiermarkierung', color: 0xf2eee3, roughness: 0.45, metalness: 0 })
+};
+// CSG leaves T-junctions whose hairline gaps would show the background; rendering
+// back faces too makes them show the part's own colour instead.
+for (const m of Object.values(mats)) m.side = THREE.DoubleSide;
+
+// ---------------------------------------------------------------- geometry helpers
+
+function finish(geo) {
+  geo.clearGroups();
+  // smooth across bevels and curves, keep crisp edges at real corners
+  return toCreasedNormals(geo, Math.PI / 5);
+}
+
+// Extrude a side-view profile (x/y) across the pistol's width (z), centred on z = 0.
+function extrudeSide(shape, width, bevel = 1, segments = 3, curveSegments = 18) {
+  const depth = Math.max(width - 2 * bevel, 0.01);
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth, curveSegments,
+    bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelOffset: -bevel, bevelSegments: segments
+  });
+  geo.translate(0, 0, -depth / 2);
+  return finish(geo);
+}
+
+// Extrude a cross-section (shape x = model z, shape y = model y) along the barrel axis from x0 to x1.
+function extrudeAlongX(shape, x0, x1, bevel = 0.5) {
+  const depth = x1 - x0 - 2 * bevel;
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth, curveSegments: 8,
+    bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelOffset: -bevel, bevelSegments: 2
+  });
+  geo.rotateY(Math.PI / 2);
+  geo.translate(x0 + bevel, 0, 0);
+  return finish(geo);
+}
+
+function box(x0, x1, y0, y1, z0, z1) {
+  const geo = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
+  geo.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  return geo;
+}
+
+function cylX(x0, x1, r, y = 0, z = 0, seg = 48) {
+  const geo = new THREE.CylinderGeometry(r, r, x1 - x0, seg);
+  geo.rotateZ(-Math.PI / 2);
+  geo.translate((x0 + x1) / 2, y, z);
+  return geo;
+}
+
+function cylZ(z0, z1, r, x, y, seg = 24) {
+  const geo = new THREE.CylinderGeometry(r, r, z1 - z0, seg);
+  geo.rotateX(Math.PI / 2);
+  geo.translate(x, y, (z0 + z1) / 2);
+  return geo;
+}
+
+function roundRect(x0, y0, x1, y1, r) {
+  const s = new THREE.Shape();
+  s.moveTo(x0 + r, y0);
+  s.lineTo(x1 - r, y0);
+  s.quadraticCurveTo(x1, y0, x1, y0 + r);
+  s.lineTo(x1, y1 - r);
+  s.quadraticCurveTo(x1, y1, x1 - r, y1);
+  s.lineTo(x0 + r, y1);
+  s.quadraticCurveTo(x0, y1, x0, y1 - r);
+  s.lineTo(x0, y0 + r);
+  s.quadraticCurveTo(x0, y0, x0 + r, y0);
+  return s;
+}
+
+// Sample a straight edge from a to b, pushed outward by offset(t) — used for the grip straps.
+function strap(path, a, b, outwardX, offset, n = 48) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy);
+  let nx = dy / len, ny = -dx / len;
+  if (Math.sign(nx) !== outwardX) { nx = -nx; ny = -ny; }
+  for (let i = 1; i <= n; i++) {
+    const t = i / n, o = offset(t);
+    path.lineTo(a[0] + dx * t + nx * o, a[1] + dy * t + ny * o);
+  }
+}
+const bump = (t, centre, width) => Math.exp(-(((t - centre) / width) ** 2));
+
+// ---------------------------------------------------------------- CSG
+
+const evaluator = new Evaluator();
+evaluator.attributes = ['position', 'uv', 'normal'];
+
+function brush(geo, mat) {
+  const b = new Brush(geo, mat);
+  b.updateMatrixWorld();
+  return b;
+}
+
+function subtract(base, ...cutters) {
+  let result = base;
+  for (const cutter of cutters) result = evaluator.evaluate(result, cutter, SUBTRACTION);
+  return result;
+}
+
+// ---------------------------------------------------------------- parts
+
+const PARTS = {
+  slide: ['Schlitten', 'Verschluss mit Visierung, gleitet beim Schuss zurück'],
+  coverPlate: ['Abdeckplatte', 'Schließt die Rückseite des Schlittens'],
+  extractor: ['Auszieher', 'Zieht die leere Hülse aus dem Patronenlager'],
+  barrel: ['Lauf', '114 mm, die Laufhaube füllt das Auswurffenster'],
+  guideRod: ['Führungsstange', 'Führt die Schließfeder unter dem Lauf'],
+  rearSight: ['Kimme', 'Hintere Visierung mit weißer U-Markierung'],
+  frontSight: ['Korn', 'Vordere Visierung mit weißem Punkt'],
+  frame: ['Rahmen', 'Polymer-Griffstück vor dem Abzugsbügel'],
+  rail: ['Zubehörschiene', 'Montageschiene für Lampe oder Laser'],
+  guard: ['Abzugsbügel', 'Eckiger Bügel, schützt den Abzug'],
+  grip: ['Griff', 'Fingermulden und raue Griffstruktur'],
+  trigger: ['Abzug', 'Safe-Action-Abzug mit Sicherungszunge'],
+  magazine: ['Magazinboden', 'Bodenplatte des 17-Schuss-Magazins'],
+  magRelease: ['Magazinhalter', 'Taste zum Lösen des Magazins'],
+  slideStop: ['Schlittenfanghebel', 'Hält den Schlitten nach dem letzten Schuss offen'],
+  takedown: ['Zerlegehebel', 'Zum Abnehmen des Schlittens'],
+  pins: ['Haltestifte', 'Verbinden Abzugsgruppe und Rahmen']
+};
+
+function part(key, ...meshes) {
+  const group = new THREE.Group();
+  group.name = PARTS[key][0];
+  group.userData.part = { name: PARTS[key][0], desc: PARTS[key][1] };
+  for (const m of meshes) {
+    const mesh = m.isMesh ? new THREE.Mesh(m.geometry, m.material) : m;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+  }
+  return group;
+}
+
+const mesh = (geo, mat) => new THREE.Mesh(geo, mat);
+
+const BORE_Y = 18.5; // barrel axis height above the slide's bottom edge
+
+function buildSlide() {
+  const s = new THREE.Shape();
+  s.moveTo(0, 0);
+  s.lineTo(186, 0);
+  s.lineTo(186, 25.6);
+  s.lineTo(184.2, 28);
+  s.lineTo(1.4, 28);
+  s.lineTo(0, 26.4);
+  s.closePath();
+  const body = brush(extrudeSide(s, 25.5, 2, 3), mats.slide);
+
+  // rear cocking serrations, both sides
+  const grooves = [];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 9; i++) {
+      const g = new THREE.BoxGeometry(1.5, 21, 2.2);
+      g.rotateZ(-0.14);
+      g.translate(8.5 + i * 3.3, 13.4, side * 13.0);
+      grooves.push(g);
+    }
+  }
+  const serrations = brush(mergeGeometries(grooves), mats.slide);
+  const port = brush(box(74, 112, 15.5, 40, -6.9, 20), mats.slideInner);
+  const muzzle = brush(cylX(168, 196, 6.2, BORE_Y), mats.cavity);
+  const rodHole = brush(cylX(172, 196, 3.0, 6.4), mats.cavity);
+
+  const slide = subtract(body, serrations, port, muzzle, rodHole);
+  return part('slide', slide);
+}
+
+function buildBarrel() {
+  const tube = subtract(
+    brush(cylX(90, 185.6, 5.8, BORE_Y), mats.barrel),
+    brush(cylX(150, 190, 4.5, BORE_Y, 0, 36), mats.cavity)
+  );
+  const chamber = mesh(cylX(72, 93, 6.9, BORE_Y), mats.barrel);
+  const hoodShape = roundRect(72, BORE_Y, 94, 27.7, 1);
+  const hood = mesh(extrudeSide(hoodShape, 13, 0.6, 2), mats.barrel);
+  return part('barrel', tube, chamber, hood);
+}
+
+function buildSights() {
+  const r = new THREE.Shape();
+  r.moveTo(5, 27.5);
+  r.lineTo(16, 27.5);
+  r.lineTo(13.2, 33.5);
+  r.lineTo(5, 33.5);
+  r.closePath();
+  const rearBody = brush(extrudeSide(r, 13, 0.6, 2), mats.polymer);
+  const notch = brush(box(0, 20, 30.5, 40, -1.7, 1.7), mats.polymer);
+  const rear = part('rearSight',
+    subtract(rearBody, notch),
+    mesh(box(4.7, 5.05, 29.8, 33.3, -2.65, -1.95), mats.paint),
+    mesh(box(4.7, 5.05, 29.8, 33.3, 1.95, 2.65), mats.paint),
+    mesh(box(4.7, 5.05, 29.8, 30.45, -2.65, 2.65), mats.paint)
+  );
+
+  const f = new THREE.Shape();
+  f.moveTo(174.5, 27.5);
+  f.lineTo(180.5, 27.5);
+  f.lineTo(178.6, 33.5);
+  f.lineTo(174.5, 33.5);
+  f.closePath();
+  const front = part('frontSight',
+    mesh(extrudeSide(f, 3.3, 0.4, 2), mats.polymer),
+    mesh(cylX(174.2, 174.7, 1.0, 31.2, 0, 24), mats.paint)
+  );
+  return [rear, front];
+}
+
+function buildSlideDetails() {
+  const plate = part('coverPlate', mesh(extrudeSide(roundRect(-0.5, 7, 0.6, 21, 0.3), 13, 0.3, 1), mats.polymer));
+  const extractor = part('extractor', mesh(box(57, 75, 12.6, 15.0, 12.4, 12.95), mats.barrel));
+  const rod = part('guideRod', mesh(cylX(176, 184.4, 2.2, 6.4, 0, 24), mats.polymer));
+  return [plate, extractor, rod];
+}
+
+function buildFrame() {
+  // upper frame / dust cover
+  const f = new THREE.Shape();
+  f.moveTo(1, 2);
+  f.lineTo(176, 2);
+  f.lineTo(176, -8.5);
+  f.lineTo(111, -8.5);
+  f.lineTo(108, -13);
+  f.lineTo(48, -13);
+  f.lineTo(48, -5);
+  f.lineTo(1, -5);
+  f.closePath();
+  const frame = part('frame', mesh(extrudeSide(f, 24, 1.5, 3), mats.frame));
+
+  // accessory rail: cross-section with the two side grooves, one cross slot
+  const rs = new THREE.Shape();
+  rs.moveTo(-11.8, -8);
+  rs.lineTo(11.8, -8);
+  rs.lineTo(11.8, -10.6);
+  rs.lineTo(9.6, -11.2);
+  rs.lineTo(9.6, -12.4);
+  rs.lineTo(10.9, -13);
+  rs.lineTo(10.9, -14.6);
+  rs.lineTo(10.4, -15.2);
+  rs.lineTo(-10.4, -15.2);
+  rs.lineTo(-10.9, -14.6);
+  rs.lineTo(-10.9, -13);
+  rs.lineTo(-9.6, -12.4);
+  rs.lineTo(-9.6, -11.2);
+  rs.lineTo(-11.8, -10.6);
+  rs.closePath();
+  const rail = part('rail', subtract(
+    brush(extrudeAlongX(rs, 111, 175.6, 0.5), mats.frame),
+    brush(box(149, 154, -16, -11.6, -14, 14), mats.frame)
+  ));
+
+  // trigger guard, a U-shaped profile that ends inside the frame above it
+  const tg = new THREE.Shape();
+  tg.moveTo(113.5, -12);
+  tg.lineTo(109.5, -36);
+  tg.quadraticCurveTo(108.5, -42, 102, -42);
+  tg.lineTo(53, -42);
+  tg.quadraticCurveTo(46, -42, 46, -35);
+  tg.lineTo(46, -12);
+  tg.lineTo(51.5, -12);
+  tg.lineTo(51.5, -31);
+  tg.quadraticCurveTo(51.5, -35.5, 56, -35.5);
+  tg.lineTo(98.5, -35.5);
+  tg.quadraticCurveTo(102.5, -35.5, 102.2, -31.5);
+  tg.lineTo(104.5, -12);
+  tg.closePath();
+  const guard = part('guard', mesh(extrudeSide(tg, 16, 2.2, 3), mats.frame));
+
+  // grip: beavertail, backstrap with palm swell, front strap with finger grooves
+  const gr = new THREE.Shape();
+  gr.moveTo(-10.5, -1.5);
+  gr.lineTo(34, -1.5);
+  gr.quadraticCurveTo(51.5, -1.5, 51.5, -15);
+  gr.lineTo(51.5, -30);
+  gr.quadraticCurveTo(51.5, -38.5, 47, -41);
+  strap(gr, [47, -41], [27, -94], +1,
+    t => 2.2 * bump(t, 0.35, 0.085) + 2.2 * bump(t, 0.63, 0.085) + 1.0 * Math.sin(Math.PI * t));
+  gr.quadraticCurveTo(26, -96.5, 22.5, -96.4);
+  gr.lineTo(-11.5, -93.6);
+  gr.quadraticCurveTo(-15.4, -93.4, -15.2, -90.5);
+  strap(gr, [-15.2, -90.5], [4, -24], -1, t => 2.4 * Math.sin(Math.PI * t) ** 1.4);
+  gr.quadraticCurveTo(7, -13, -2, -10.5);
+  gr.lineTo(-13, -9.5);
+  gr.quadraticCurveTo(-17.5, -7.5, -15, -3);
+  gr.quadraticCurveTo(-14, -1.5, -10.5, -1.5);
+  const grip = part('grip', mesh(extrudeSide(gr, 30, 3, 4, 24), mats.grip));
+
+  // magazine floor plate
+  const mb = new THREE.Shape();
+  mb.moveTo(-12, -92.8);
+  mb.lineTo(24, -95.8);
+  mb.quadraticCurveTo(28, -96, 28, -98.5);
+  mb.lineTo(27.5, -100.5);
+  mb.quadraticCurveTo(27, -102.6, 24, -102.5);
+  mb.lineTo(-11, -99.6);
+  mb.quadraticCurveTo(-14.5, -99.4, -14.5, -96.5);
+  mb.quadraticCurveTo(-14.5, -92.9, -12, -92.8);
+  const magazine = part('magazine', mesh(extrudeSide(mb, 25.5, 1.8, 3), mats.polymer));
+
+  // trigger with its safety blade
+  const tr = new THREE.Shape();
+  tr.moveTo(71.5, -11);
+  tr.quadraticCurveTo(65, -24, 72.5, -32.5);
+  tr.quadraticCurveTo(75.2, -33.4, 76, -31);
+  tr.quadraticCurveTo(70.5, -23.5, 77.5, -11);
+  tr.closePath();
+  const blade = new THREE.Shape();
+  blade.moveTo(70.3, -15);
+  blade.quadraticCurveTo(63.2, -24, 70.6, -30);
+  blade.lineTo(72.4, -30);
+  blade.quadraticCurveTo(66.6, -24, 72.6, -15);
+  blade.closePath();
+  const trigger = part('trigger',
+    mesh(extrudeSide(tr, 6.5, 1.2, 3), mats.polymer),
+    mesh(extrudeSide(blade, 2.2, 0.5, 2), mats.polymer)
+  );
+
+  // controls on the frame
+  const releaseGeo = extrudeSide(roundRect(42.5, -27, 50, -19, 1.8), 2.4, 0.6, 2);
+  releaseGeo.translate(0, 0, -15);
+  const magRelease = part('magRelease', mesh(releaseGeo, mats.polymer));
+
+  const ss = new THREE.Shape();
+  ss.moveTo(56, -2.2);
+  ss.lineTo(83, -2.2);
+  ss.quadraticCurveTo(87, -1.6, 87, -4.2);
+  ss.quadraticCurveTo(86.5, -6.2, 83, -6);
+  ss.lineTo(56, -4.4);
+  ss.closePath();
+  const stopGeo = extrudeSide(ss, 1.4, 0.35, 2);
+  stopGeo.translate(0, 0, -12.5);
+  const slideStop = part('slideStop', mesh(stopGeo, mats.slide));
+
+  const takedown = part('takedown',
+    mesh(box(91, 98, -4.4, -1.2, 11.5, 12.5), mats.slide),
+    mesh(box(91, 98, -4.4, -1.2, -12.5, -11.5), mats.slide)
+  );
+
+  const pins = part('pins',
+    mesh(cylZ(-12.2, 12.2, 1.5, 70, -7.5), mats.steel),
+    mesh(cylZ(-12.2, 12.2, 1.5, 100, -5.2), mats.steel),
+    mesh(cylZ(-15.15, 15.15, 1.5, 8, -7), mats.steel)
+  );
+
+  return [frame, rail, guard, grip, magazine, trigger, magRelease, slideStop, takedown, pins];
+}
+
+function buildPistol() {
+  const model = new THREE.Group();
+  model.name = 'Glock 17';
+  model.add(buildSlide(), buildBarrel(), ...buildSights(), ...buildSlideDetails(), ...buildFrame());
+  return model;
+}
+
+// ---------------------------------------------------------------- scene
+
+const stage = document.getElementById('stage');
+const statusEl = document.getElementById('status');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false });
+} catch (err) {
+  statusEl.textContent = 'WebGL ist in diesem Browser nicht verfügbar.';
+  throw err;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 50);
+
+const key = new THREE.DirectionalLight(0xffffff, 2.3);
+key.position.set(1.2, 6, 2.2);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = key.shadow.camera.bottom = -1.6;
+key.shadow.camera.right = key.shadow.camera.top = 1.6;
+key.shadow.camera.near = 1;
+key.shadow.camera.far = 12;
+key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.012;
+key.shadow.radius = 4;
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0xf2f4ff, 1.3);
+fill.position.set(-1.5, 2.5, -4);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xdfe8ff, 1.2);
+rim.position.set(-5, 2.5, 0.6);
+scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x404448, 0.45));
+
+const statusDone = () => { statusEl.hidden = true; };
+
+let model, root;
+try {
+  model = buildPistol();
+} catch (err) {
+  statusEl.textContent = 'Das Modell konnte nicht aufgebaut werden.';
+  throw err;
+}
+
+const bbox = new THREE.Box3().setFromObject(model);
+const centre = bbox.getCenter(new THREE.Vector3());
+model.position.copy(centre).multiplyScalar(-1);
+root = new THREE.Group();
+root.scale.setScalar(MM);
+root.add(model);
+scene.add(root);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.ShadowMaterial({ opacity: 0.2 }));
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = (bbox.min.y - centre.y) * MM - 0.06;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 1.4;
+controls.maxDistance = 12;
+controls.autoRotateSpeed = 0.7;
+controls.autoRotate = !reduceMotion;
+
+// ---------------------------------------------------------------- views
+
+const VIEWS = {
+  hero: new THREE.Vector3(1.55, 0.75, 3.4),
+  left: new THREE.Vector3(0, 0.08, -3.9),
+  right: new THREE.Vector3(0, 0.08, 3.9),
+  top: new THREE.Vector3(0, 3.9, 0.02)
+};
+
+// Distance that keeps the whole pistol in frame, and a target below the model so it
+// sits above the panels at the bottom of the screen.
+function framing() {
+  const aspect = camera.aspect;
+  const distance = 4.4 * (aspect < 1.35 ? Math.min(2.4, 1.35 / aspect) : 1);
+  const visibleHeight = 2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const target = new THREE.Vector3(0, -visibleHeight * (aspect < 1 ? 0.1 : 0.06), 0);
+  return { distance, target };
+}
+
+let tween = null;
+function goTo(name, instant = false) {
+  const { distance, target } = framing();
+  const to = new THREE.Spherical().setFromVector3(VIEWS[name].clone().setLength(distance));
+  const from = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+  let dTheta = to.theta - from.theta;
+  dTheta = Math.atan2(Math.sin(dTheta), Math.cos(dTheta));
+  if (instant || reduceMotion) {
+    controls.target.copy(target);
+    camera.position.setFromSpherical(to).add(target);
+    tween = null;
+    return;
+  }
+  tween = { from, to, dTheta, t0: performance.now(), dur: 800, target0: controls.target.clone(), target1: target };
+}
+
+function stepTween(now) {
+  if (!tween) return;
+  const k = Math.min(1, (now - tween.t0) / tween.dur);
+  const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+  const s = new THREE.Spherical(
+    THREE.MathUtils.lerp(tween.from.radius, tween.to.radius, e),
+    THREE.MathUtils.lerp(tween.from.phi, tween.to.phi, e),
+    tween.from.theta + tween.dTheta * e
+  );
+  controls.target.lerpVectors(tween.target0, tween.target1, e);
+  camera.position.setFromSpherical(s).add(controls.target);
+  if (k >= 1) tween = null;
+}
+
+const viewButtons = [...document.querySelectorAll('[data-view]')];
+function setPressedView(name) {
+  for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset.view === name));
+}
+for (const b of viewButtons) {
+  b.addEventListener('click', () => {
+    setPressedView(b.dataset.view);
+    setSpin(false);
+    goTo(b.dataset.view);
+  });
+}
+
+const spinBtn = document.getElementById('spin');
+function setSpin(on) {
+  controls.autoRotate = on;
+  spinBtn.setAttribute('aria-pressed', String(on));
+}
+setSpin(controls.autoRotate);
+spinBtn.addEventListener('click', () => setSpin(!controls.autoRotate));
+controls.addEventListener('start', () => {
+  tween = null;
+  setPressedView(null);
+});
+
+const swatchName = document.getElementById('swatch-name');
+const swatches = [...document.querySelectorAll('[data-color]')];
+for (const sw of swatches) {
+  sw.addEventListener('click', () => {
+    const c = FRAME_COLORS[sw.dataset.color];
+    mats.frame.color.setHex(c.hex);
+    mats.grip.color.setHex(c.hex);
+    for (const o of swatches) o.setAttribute('aria-pressed', String(o === sw));
+    swatchName.textContent = c.label;
+  });
+}
+
+// ---------------------------------------------------------------- part labels
+
+const tip = document.getElementById('tip');
+const tipName = document.getElementById('tip-name');
+const tipDesc = document.getElementById('tip-desc');
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let hoverPending = null;
+let tapTimer = 0;
+
+function partAt(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObject(model, true)[0];
+  let o = hit?.object;
+  while (o && !o.userData.part) o = o.parent;
+  return o?.userData.part ?? null;
+}
+
+function showTip(info, x, y) {
+  if (!info) { tip.hidden = true; return; }
+  tipName.textContent = info.name;
+  tipDesc.textContent = info.desc;
+  tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  const left = Math.min(Math.max(8, x + 16), innerWidth - w - 8);
+  const top = Math.min(Math.max(8, y + 16), innerHeight - h - 8);
+  tip.style.transform = `translate(${left}px, ${top}px)`;
+}
+
+const canvas = renderer.domElement;
+canvas.addEventListener('pointermove', e => {
+  if (e.pointerType === 'mouse' && e.buttons === 0) hoverPending = { x: e.clientX, y: e.clientY };
+  else if (e.pointerType === 'mouse') tip.hidden = true;
+});
+canvas.addEventListener('pointerleave', () => { hoverPending = null; tip.hidden = true; });
+let down = null;
+canvas.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; });
+canvas.addEventListener('pointerup', e => {
+  if (!down || e.pointerType === 'mouse') return;
+  if (Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8) {
+    showTip(partAt(e.clientX, e.clientY), e.clientX, e.clientY);
+    clearTimeout(tapTimer);
+    tapTimer = setTimeout(() => { tip.hidden = true; }, 2600);
+  }
+  down = null;
+});
+
+// ---------------------------------------------------------------- render loop
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(() => resize()).observe(stage);
+resize();
+goTo('hero', true);
+
+renderer.setAnimationLoop(now => {
+  stepTween(now);
+  controls.update();
+  if (hoverPending) {
+    showTip(partAt(hoverPending.x, hoverPending.y), hoverPending.x, hoverPending.y);
+    hoverPending = null;
+  }
+  renderer.render(scene, camera);
+});
+statusDone();
+
+// ---------------------------------------------------------------- export (browser console: await pistolModel.downloadGLB())
+
+window.pistolModel = {
+  model,
+  async exportGLB() {
+    const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
+    const wrap = new THREE.Group();
+    wrap.name = 'Glock17';
+    wrap.scale.setScalar(0.001); // glTF works in metres
+    wrap.add(model.clone(true));
+    return new Promise((resolve, reject) => new GLTFExporter().parse(wrap, resolve, reject, { binary: true }));
+  },
+  async downloadGLB() {
+    const buffer = await this.exportGLB();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([buffer], { type: 'model/gltf-binary' }));
+    a.download = 'glock17.glb';
+    a.click();
+  }
+};
+</script>
