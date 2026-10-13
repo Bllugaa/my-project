@@ -62,6 +62,14 @@ def cutter_collection():
     return col
 
 
+def hide_cutters():
+    """Hide the Cutters collection with its eye icon (saved in the file): one click in the
+    outliner shows every cutter again. Booleans keep working while it is hidden."""
+    lc = bpy.context.view_layer.layer_collection.children.get(CUTTERS)
+    if lc is not None:
+        lc.hide_viewport = True
+
+
 def link(obj, col_name="Glock17 Parts", parent=None):
     """Link obj into a collection and parent it to the root empty (or `parent`)."""
     for c in list(obj.users_collection):
@@ -281,7 +289,11 @@ def text_mesh(name, body, size, x, up, right, depth, facing="left"):
 # --------------------------------------------------------------------------- modifiers
 
 def cutter(obj, material=None):
-    """Turn obj into a hidden boolean cutter (kept live so the model stays editable)."""
+    """Turn obj into a boolean cutter (kept live so the model stays editable).
+
+    Cutters are not hidden one by one: build_glock hides the whole "Cutters" collection with
+    its eye icon (hide_cutters), so clicking that eye shows them all again as wireframes.
+    """
     for c in list(obj.users_collection):
         c.objects.unlink(obj)
     cutter_collection().objects.link(obj)
@@ -289,7 +301,6 @@ def cutter(obj, material=None):
     obj.matrix_parent_inverse = Matrix.Identity(4)
     obj.display_type = "WIRE"
     obj.hide_render = True
-    obj.hide_viewport = True
     if material:
         assign(obj, material)
     return obj
@@ -347,20 +358,25 @@ def _smooth_by_angle_group(angle_deg=32):
 
 
 def finish(obj, bevel=0.4, segments=3, bevel_angle=30, smooth_angle=32, weighted=True):
-    """Standard modifier tail: Bevel (by angle) -> Smooth by Angle -> Weighted Normal.
+    """Standard modifier tail: Bevel (by angle) -> Weld -> Smooth by Angle -> Weighted Normal.
 
     Call after adding booleans, so cut edges get bevelled and shaded too.
-    Pass bevel=0 to skip the bevel.
+    Pass bevel=0 to skip the bevel. At least 3 bevel segments are used: with 2, the middle
+    facet of a 90 degree edge turns 45 degrees, more than the smooth angle, and shows as a
+    crease. The Weld collapses the zero-area faces a clamped bevel leaves on short steps.
     """
     if bevel > 0:
         b = obj.modifiers.new("Bevel", "BEVEL")
         b.width = bevel
-        b.segments = segments
+        b.segments = max(segments, 3)
         b.limit_method = "ANGLE"
         b.angle_limit = math.radians(bevel_angle)
         b.use_clamp_overlap = True
         b.miter_outer = "MITER_ARC"
         b.profile = 0.5
+        wd = obj.modifiers.new("Weld", "WELD")
+        wd.merge_threshold = 0.002           # mm (object space): 2 micrometres
+        wd.mode = "ALL"
     s = obj.modifiers.new("Smooth by Angle", "NODES")
     s.node_group = _smooth_by_angle_group(smooth_angle)
     if weighted:
